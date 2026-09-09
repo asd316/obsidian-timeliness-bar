@@ -1,4 +1,4 @@
-# Shixiao Bar for Obsidian
+# Timeliness Bar for Obsidian
 
 Render inline timeliness bars as clean, clickable badges. The underlying data stays plain Markdown, so your notes remain readable even without the plugin.
 

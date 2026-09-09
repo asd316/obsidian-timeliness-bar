@@ -1,6 +1,6 @@
 {
   "id": "shixiao",
-  "name": "Shixiao Bar",
+  "name": "Timeliness Bar",
   "version": "0.3.0",
   "minAppVersion": "1.4.0",
   "description": "Render inline timeliness bars as clean badges with a calendar editor. Data stays plain Markdown."
