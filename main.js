@@ -9,13 +9,8 @@ const { Plugin, Modal, Setting, Notice } = require("obsidian");
 const { ViewPlugin, Decoration, WidgetType } = require("@codemirror/view");
 const { RangeSetBuilder, EditorSelection } = require("@codemirror/state");
 
-// 新格式：callout + 中文 inline field
 const LINE_RE = /^>\s*\[!时效\]\s*\(时效起::\s*(\d{4}-\d{2}-\d{2})\s*\)\s*\(时效止::\s*(\d{4}-\d{2}-\d{2})\s*\)\s*\(时效状态::\s*([^()]*)\s*\)\s*$/;
 const TEXT_RE = /^\(时效起::\s*(\d{4}-\d{2}-\d{2})\s*\)\s*\(时效止::\s*(\d{4}-\d{2}-\d{2})\s*\)\s*\(时效状态::\s*([^()]*)\s*\)\s*$/;
-
-// 旧格式：列表项 + 英文/拼音 inline field（主仓库历史数据）
-const OLD_LINE_RE = /^-\s+\[时效条::\s*yes\]\s+\[valid_from::\s*(\d{4}-\d{2}-\d{2})\s*\](?:\s+\[valid_to::\s*(\d{4}-\d{2}-\d{2})\s*\])?\s+\[valid_status::\s*([^\[\]]+?)\s*\]/;
-const OLD_TEXT_RE = /^\[时效条::\s*yes\]\s+\[valid_from::\s*(\d{4}-\d{2}-\d{2})\s*\](?:\s+\[valid_to::\s*(\d{4}-\d{2}-\d{2})\s*\])?\s+\[valid_status::\s*([^\[\]]+?)\s*\]/;
 
 const STATUS_CLASS = {
   // 英文状态（推荐）
@@ -28,23 +23,12 @@ const STATUS_CLASS = {
   "现行": "shixiao-in-progress",
   "过期": "shixiao-expired",
   "失效": "shixiao-dropped",
-  "草案": "shixiao-in-progress",
 };
 
 function todayStr(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
   return d.toISOString().slice(0, 10);
-}
-
-function normalizeStatus(s) {
-  const map = {
-    "现行": "IN PROGRESS",
-    "过期": "EXPIRED",
-    "失效": "DROPPED",
-    "草案": "IN PROGRESS",
-  };
-  return map[s.trim()] || s.trim();
 }
 
 function buildLine(v) {
@@ -132,7 +116,7 @@ function buildBadge(v, onClick) {
   badge.addClass("shixiao-badge", STATUS_CLASS[v.status] || "shixiao-current");
   badge.setAttr("role", "button");
   badge.createSpan({ cls: "shixiao-icon", text: "🕓" });
-  badge.createSpan({ cls: "shixiao-range", text: v.end ? `${v.start} ~ ${v.end}` : `${v.start} ~ ∞` });
+  badge.createSpan({ cls: "shixiao-range", text: `${v.start} ~ ${v.end}` });
   badge.createSpan({ cls: "shixiao-status", text: status });
   badge.createSpan({ cls: "shixiao-hint", text: "点击修改" });
   badge.addEventListener("click", (e) => {
@@ -182,9 +166,7 @@ class ShixiaoWidget extends WidgetType {
         new ShixiaoModal(this.plugin.app, this.value, (nv) => {
           const view = this.plugin.getActiveEditorView();
           if (!view) return;
-          // 旧格式编辑时转换为新格式，并保留换行避免粘连下一行
-          const insert = buildLine(nv) + (this.value.isOld ? "\n" : "");
-          view.dispatch({ changes: { from: this.from, to: this.to, insert } });
+          view.dispatch({ changes: { from: this.from, to: this.to, insert: buildLine(nv) } });
         }).open();
       });
     } catch (e) {
@@ -218,18 +200,8 @@ function buildLivePreviewPlugin(plugin) {
             for (let pos = vr.from; pos <= vr.to; ) {
               const line = view.state.doc.lineAt(pos);
               pos = line.to + 1;
-              let m = line.text.match(LINE_RE);
-              let value, isOld = false;
-              if (m) {
-                value = { start: m[1], end: m[2], status: m[3] };
-              } else {
-                m = line.text.match(OLD_LINE_RE);
-                if (m) {
-                  value = { start: m[1], end: m[2] || todayStr(30), status: normalizeStatus(m[3]) };
-                  isOld = true;
-                }
-              }
-              if (!value) continue;
+              const m = line.text.match(LINE_RE);
+              if (!m) continue;
               if (sel.from <= line.to && sel.to >= line.from) {
                 skipped++;
                 continue; // 光标在这一行时显示原文，方便手改
@@ -239,7 +211,7 @@ function buildLivePreviewPlugin(plugin) {
                 line.from,
                 line.to,
                 Decoration.replace({
-                  widget: new ShixiaoWidget({ ...value, isOld }, line.from, line.to, plugin),
+                  widget: new ShixiaoWidget({ start: m[1], end: m[2], status: m[3] }, line.from, line.to, plugin),
                 })
               );
             }
@@ -247,6 +219,7 @@ function buildLivePreviewPlugin(plugin) {
         } catch (e) {
           console.error("[shixiao] 实时预览装饰失败，已回退为原文", e);
         }
+        console.log("[shixiao] live preview matched=", matched, "skipped(cursor)=", skipped);
         return builder.finish();
       }
     },
@@ -264,14 +237,15 @@ module.exports = class ShixiaoBarPlugin extends Plugin {
     // 同时 ctx.getSectionInfo(callout) 在某些 Obsidian 版本/主题下会返回 null。
     // 因此这里直接解析 callout 的 DOM：先尝试 Dataview 的 .inline-field 结构，再回退到原始文本。
     this.registerMarkdownPostProcessor((el, ctx) => {
-      // 1. 新格式：.callout[data-callout="时效"]
       const callouts = Array.from(el.querySelectorAll(".callout"));
       if (el.matches && el.matches(".callout")) callouts.unshift(el);
+
       for (const callout of callouts) {
         try {
           if (callout.getAttr("data-callout") !== "时效") continue;
           const value = parseCalloutValue(callout);
           if (!value) continue;
+
           const content = callout.querySelector(".callout-content") || callout;
           content.empty();
           content.appendChild(
@@ -279,28 +253,6 @@ module.exports = class ShixiaoBarPlugin extends Plugin {
           );
         } catch (e) {
           console.error("[shixiao] 阅读模式渲染失败，已回退为原文", e);
-        }
-      }
-
-      // 2. 旧格式：列表项/段落中的 [时效条:: yes] ... [valid_status:: ...]
-      const oldNodes = Array.from(el.querySelectorAll("p, li"));
-      if (el.matches && (el.matches("p") || el.matches("li"))) oldNodes.unshift(el);
-      for (const node of oldNodes) {
-        try {
-          const text = node.textContent && node.textContent.trim();
-          const m = text && text.match(OLD_TEXT_RE);
-          if (!m) continue;
-          // 只替换最内层文本节点，避免父子重复
-          const childMatch = Array.from(node.children).some((c) => {
-            const ct = c.textContent && c.textContent.trim();
-            return ct && ct.match(OLD_TEXT_RE);
-          });
-          if (childMatch) continue;
-          const value = { start: m[1], end: m[2] || todayStr(30), status: normalizeStatus(m[3]), isOld: true };
-          node.empty();
-          node.appendChild(buildBadge(value, () => this.editFromReading(ctx, value)));
-        } catch (e) {
-          console.error("[shixiao] 阅读模式旧格式渲染失败，已回退为原文", e);
         }
       }
     });
@@ -336,10 +288,6 @@ module.exports = class ShixiaoBarPlugin extends Plugin {
       const text = await this.app.vault.read(file);
       const lines = text.split("\n");
       const idx = lines.findIndex((l) => {
-        if (oldValue.isOld) {
-          const m = l.match(OLD_LINE_RE);
-          return m && m[1] === oldValue.start && (m[2] || todayStr(30)) === oldValue.end && normalizeStatus(m[3]) === oldValue.status;
-        }
         const m = l.match(LINE_RE);
         return m && m[1] === oldValue.start && m[2] === oldValue.end && m[3] === oldValue.status;
       });
@@ -347,7 +295,6 @@ module.exports = class ShixiaoBarPlugin extends Plugin {
         new Notice("没找到对应的时效条，请回到编辑模式手动修改");
         return;
       }
-      // 旧格式编辑时自动转换为新格式
       lines[idx] = buildLine(nv);
       await this.app.vault.modify(file, lines.join("\n"));
     }).open();
