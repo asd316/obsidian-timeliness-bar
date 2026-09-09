@@ -1,0 +1,78 @@
+/* 时效条徽标：干净、按状态配色、可点击 */
+.shixiao-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  margin: 2px 0;
+  border-radius: 999px;
+  font-size: 0.86em;
+  font-family: var(--font-monospace);
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+}
+.shixiao-badge .shixiao-hint {
+  font-size: 0.75em;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.shixiao-badge:hover .shixiao-hint { opacity: 0.55; }
+.shixiao-status {
+  font-weight: 700;
+  padding: 1px 10px;
+  border-radius: 999px;
+}
+.shixiao-none { background: rgba(120,120,120,0.06); border-color: rgba(120,120,120,0.30); }
+.shixiao-none .shixiao-status { background: #8c8c8c; color: #fff; }
+.shixiao-in-progress { background: rgba(47,129,247,0.10); border-color: rgba(47,129,247,0.45); }
+.shixiao-in-progress .shixiao-status { background: #2f81f7; color: #fff; }
+.shixiao-done { background: rgba(46,160,67,0.10); border-color: rgba(46,160,67,0.45); }
+.shixiao-done .shixiao-status { background: #2ea043; color: #fff; }
+.shixiao-dropped { background: rgba(120,120,120,0.08); border-color: rgba(120,120,120,0.35); opacity: 0.75; }
+.shixiao-dropped .shixiao-status { background: #6e6e6e; color: #fff; text-decoration: line-through; }
+.shixiao-expired { background: rgba(210,153,34,0.10); border-color: rgba(210,153,34,0.45); }
+.shixiao-expired .shixiao-status { background: #b08800; color: #fff; }
+
+/* 旧中文状态兼容 */
+.shixiao-current { background: rgba(47,129,247,0.10); border-color: rgba(47,129,247,0.45); }
+.shixiao-current .shixiao-status { background: #2f81f7; color: #fff; }
+.shixiao-void { background: rgba(120,120,120,0.08); border-color: rgba(120,120,120,0.35); opacity: 0.75; }
+.shixiao-void .shixiao-status { background: #6e6e6e; color: #fff; text-decoration: line-through; }
+
+/* 弹窗 */
+.shixiao-modal .shixiao-dates-row {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0;
+}
+.shixiao-modal .shixiao-date-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.shixiao-modal .shixiao-date-field label {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+.shixiao-modal input[type="date"] {
+  font-family: var(--font-monospace);
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+
+/* 时效 callout 的容器本身弱化：视觉由徽标承担（插件关闭时原文仍可读） */
+.callout[data-callout="时效"] {
+  --callout-color: 120, 120, 120;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.callout[data-callout="时效"] .callout-title { display: none; }
+.callout[data-callout="时效"] .callout-content { padding: 0; }
+.callout[data-callout="时效"] .callout-content p { margin: 2px 0; }
